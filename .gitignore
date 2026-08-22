@@ -1,0 +1,9 @@
+# Datenbank-Secrets und Umgebungsvariablen
+.env
+
+# Eigenes Vereinslogo (per README selbst hier ablegen, nicht ins Repo committen)
+assets/branding/logo.svg
+assets/branding/logo.png
+
+# Betriebssystem-spezifische Dateien
+.DS_Store

@@ -1,0 +1,64 @@
+/* Kompakte Semester-Zeile: Label + Dropdown nebeneinander */
+
+.rangliste-semester-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem 0.875rem;
+    max-width: 100%;
+}
+
+.rangliste-semester-bar__label {
+    flex: 0 0 auto;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.rangliste-semester-bar__form {
+    flex: 1 1 12rem;
+    min-width: 0;
+    max-width: 18rem;
+}
+
+.rangliste-semester-bar__select {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 0.875rem;
+    line-height: 1.25;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    background-color: #fff;
+    color: var(--color-primary);
+    font-weight: 500;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+}
+
+.rangliste-semester-bar__select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 25%, transparent);
+}
+
+.rangliste-total-highlight {
+    background-color: color-mix(in srgb, var(--color-primary) 5%, white);
+}
+
+@media (max-width: 380px) {
+    .rangliste-semester-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .rangliste-semester-bar__form {
+        max-width: none;
+    }
+
+    .rangliste-semester-bar__label {
+        text-align: center;
+    }
+}
