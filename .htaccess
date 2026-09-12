@@ -1,0 +1,11 @@
+# .env und andere sensible Dateien vor Web-Zugriff schuetzen
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Zusaetzlich explizit .env blockieren
+<Files ".env">
+    Order allow,deny
+    Deny from all
+</Files>
