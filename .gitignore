@@ -4,6 +4,15 @@
 # Eigenes Vereinslogo (per README selbst hier ablegen, nicht ins Repo committen)
 assets/branding/logo.svg
 assets/branding/logo.png
+assets/branding/logo-dark.svg
+assets/branding/logo-dark.png
+assets/branding/favicon.png
 
 # Betriebssystem-spezifische Dateien
 .DS_Store
+
+# Login-Sperre (Fehlversuche pro IP, wird automatisch angelegt)
+.login_attempts.json
+
+# Schrift-Zwischenspeicher, den Dompdf beim ersten PDF selbst anlegt
+vendor/dompdf/dompdf/lib/fonts/*.ufm.json

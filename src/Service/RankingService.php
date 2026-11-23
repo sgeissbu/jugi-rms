@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Config\DisciplineMeta;
 use App\Config\RankingConfig;
 use App\Repository\ParticipantRepository;
 use App\Repository\DisciplineRepository;
@@ -22,7 +23,11 @@ class RankingService {
      * Berechnet die Rangliste für eine bestimmte Gruppe.
      * $dateStart/$dateEnd: Semester-Zeitraum (resultate.datum), inkl. Grenzen.
      */
-    public function getRanking(string $gender, int $minYear, int $maxYear, string $dateStart, string $dateEnd): array {
+    /**
+     * $categoryKey: Disziplinen, die laut Spalte «kategorien» in dieser Kategorie nicht zählen, werden weggelassen
+     * (keine Punkte, keine Strafpunkte). null = alle Disziplinen.
+     */
+    public function getRanking(string $gender, int $minYear, int $maxYear, string $dateStart, string $dateEnd, ?string $categoryKey = null): array {
         $isCurrentSemester = RankingConfig::isCurrentSemesterDateRange($dateStart, $dateEnd);
         if ($isCurrentSemester) {
             $allParticipantsData = $this->participantRepo->getByGenderAndYearRange($gender, $minYear, $maxYear);
@@ -73,6 +78,14 @@ class RankingService {
             foreach ($disciplineNames as $dn) {
                 $hochByDisc[$dn] = isset($meta[$dn]) ? (int)$meta[$dn]['hoch_ist_besser'] : 1;
             }
+        }
+
+        // Disziplinen, die in dieser Kategorie nicht gewertet werden (z.B. Kugelstossen erst ab U14)
+        if ($categoryKey !== null) {
+            $metaByName = $isCurrentSemester ? array_column($disciplineRows, null, 'name') : $meta;
+            $disciplineNames = array_values(array_filter($disciplineNames, function ($dn) use ($metaByName, $categoryKey) {
+                return DisciplineMeta::countsFor($metaByName[$dn] ?? [], $categoryKey);
+            }));
         }
 
         $disciplineResults = [];

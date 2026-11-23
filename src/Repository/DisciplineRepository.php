@@ -7,16 +7,28 @@ use PDO;
 class DisciplineRepository {
     private $pdo;
 
+    /** Erlaubte Tabelle/Spalte-Kombinationen für {@see checkValueExists}. */
+    private const ALLOWED_COLUMNS = [
+        'disziplinen' => ['name'],
+    ];
+
+    /** Optionale Spalten aus Migration 001; fehlen sie, werden sie als NULL geliefert. */
+    private const OPTIONAL_COLUMNS = ['symbol', 'einheit_winter', 'einheit_sommer', 'kategorien'];
+    /** @var array<string,bool>|null Cache: welche optionalen Spalten existieren */
+    private static $existing = null;
+
     public function __construct(PDO $pdo) {
         $this->pdo = $pdo;
     }
 
     /**
      * Überprüft, ob ein gegebener Wert in einer bestimmten Datenbanktabelle und Spalte existiert.
+     * Tabelle/Spalte werden gegen eine Allowlist geprüft, da sie direkt interpoliert werden (nicht parametrisierbar in PDO).
      */
     public function checkValueExists(string $table, string $column, string $value): bool {
-        // Hinweis: Tabellen- und Spaltennamen sollten validiert sein, um SQL-Injection zu vermeiden
-        // Hier gehen wir davon aus, dass sie intern festgelegt werden.
+        if (!isset(self::ALLOWED_COLUMNS[$table]) || !in_array($column, self::ALLOWED_COLUMNS[$table], true)) {
+            throw new \InvalidArgumentException('Ungültige Tabelle/Spalte für checkValueExists().');
+        }
         $sql = "SELECT COUNT(*) FROM $table WHERE $column = ?";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([$value]);
@@ -31,7 +43,7 @@ class DisciplineRepository {
     }
 
     /**
-     * Ob die Disziplin existiert und aktiv ist (Erfassung / Autocomplete).
+     * Ob die Disziplin existiert und aktiv ist (Erfassung).
      */
     public function existsActive(string $name): bool {
         $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM disziplinen WHERE name = ? AND aktiv = 1');
@@ -44,41 +56,34 @@ class DisciplineRepository {
      * Holt alle Disziplinen mit ihren Metadaten.
      */
     public function getAllWithMetadata(): array {
-        $stmt = $this->pdo->query("SELECT name, hoch_ist_besser FROM disziplinen ORDER BY name ASC");
+        $stmt = $this->pdo->query('SELECT ' . $this->columns() . ' FROM disziplinen ORDER BY name ASC');
         return $stmt->fetchAll();
     }
 
     /**
-     * Sucht Disziplinen nach einem Begriff.
-     *
-     * @param bool $activeOnly nur Zeilen mit aktiv = 1 (z. B. Autocomplete bei neuer Resultat-Erfassung)
-     */
-    public function search(string $term, int $limit = 10, bool $activeOnly = false): array {
-        $searchTerm = '%' . $term . '%';
-        $sql = 'SELECT name FROM disziplinen WHERE name LIKE ?';
-        if ($activeOnly) {
-            $sql .= ' AND aktiv = 1';
-        }
-        $sql .= ' ORDER BY name ASC LIMIT ' . (int)$limit;
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$searchTerm]);
-
-        return $stmt->fetchAll(PDO::FETCH_COLUMN);
-    }
-
-    /**
-     * Holt alle aktiven Disziplinen.
+     * Holt alle aktiven Disziplinen (inkl. Symbol/Einheiten, falls Migration 001 eingespielt ist).
      */
     public function getActive(): array {
-        $stmt = $this->pdo->query("SELECT name, hoch_ist_besser FROM disziplinen WHERE aktiv = 1 ORDER BY name ASC");
+        $stmt = $this->pdo->query('SELECT ' . $this->columns() . ' FROM disziplinen WHERE aktiv = 1 ORDER BY name ASC');
         return $stmt->fetchAll();
+    }
+
+    /**
+     * Eine aktive Disziplin nach Name (für die Erfassung).
+     */
+    public function getActiveByName(string $name): ?array {
+        $stmt = $this->pdo->prepare('SELECT ' . $this->columns() . ' FROM disziplinen WHERE name = ? AND aktiv = 1');
+        $stmt->execute([$name]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
     }
 
     /**
      * Metadaten zu einer Liste von Namen (Reihenfolge wie übergeben).
      *
      * @param list<string> $names
-     * @return array<string, array{name:string,hoch_ist_besser:int}>
+     * @return array<string, array{name:string,hoch_ist_besser:int,symbol:?string,einheit_winter:?string,einheit_sommer:?string}>
      */
     public function getMetadataByNames(array $names): array {
         if ($names === []) {
@@ -86,7 +91,7 @@ class DisciplineRepository {
         }
 
         $placeholders = implode(',', array_fill(0, count($names), '?'));
-        $sql = "SELECT name, hoch_ist_besser FROM disziplinen WHERE name IN ($placeholders)";
+        $sql = 'SELECT ' . $this->columns() . " FROM disziplinen WHERE name IN ($placeholders)";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute(array_values($names));
         $byName = [];
@@ -95,5 +100,27 @@ class DisciplineRepository {
         }
 
         return $byName;
+    }
+
+    /**
+     * Spaltenliste; ohne Migration 001 werden die neuen Felder als NULL geliefert.
+     */
+    private function columns(): string {
+        if (self::$existing === null) {
+            self::$existing = [];
+            try {
+                foreach ($this->pdo->query('SHOW COLUMNS FROM disziplinen')->fetchAll() as $col) {
+                    self::$existing[$col['Field']] = true;
+                }
+            } catch (\PDOException $e) {
+                // ohne Rechte für SHOW COLUMNS: optionale Spalten als NULL
+            }
+        }
+        $cols = ['name', 'hoch_ist_besser'];
+        foreach (self::OPTIONAL_COLUMNS as $c) {
+            $cols[] = isset(self::$existing[$c]) ? $c : "NULL AS $c";
+        }
+
+        return implode(', ', $cols);
     }
 }

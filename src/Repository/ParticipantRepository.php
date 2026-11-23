@@ -35,6 +35,39 @@ class ParticipantRepository {
         return $stmt->fetchColumn() > 0;
     }
 
+    /** Trainingstage (Spalte → Kurzname), Reihenfolge Mo–Fr. */
+    public const WEEKDAYS = ['montag' => 'Mo', 'dienstag' => 'Di', 'mittwoch' => 'Mi', 'donnerstag' => 'Do', 'freitag' => 'Fr'];
+
+    /**
+     * Aktive Teilnehmer für die Erfassung/Übersicht (alle auf einmal, Suche läuft im Browser).
+     *
+     * @return list<array{id:int,vorname:string,nachname:string,jahrgang:int,geschlecht:string,days:list<string>}>
+     */
+    public function getActiveWithDays(): array {
+        $sql = 'SELECT id, vorname, nachname, jahrgang, geschlecht, ' . implode(', ', array_keys(self::WEEKDAYS)) . '
+            FROM teilnehmer WHERE ' . self::SQL_ACTIVE_TRAINING_DAY . '
+            ORDER BY vorname ASC, nachname ASC';
+        $out = [];
+        foreach ($this->pdo->query($sql)->fetchAll() as $row) {
+            $days = [];
+            foreach (array_keys(self::WEEKDAYS) as $day) {
+                if ((int)$row[$day] === 1) {
+                    $days[] = $day;
+                }
+            }
+            $out[] = [
+                'id' => (int)$row['id'],
+                'vorname' => (string)$row['vorname'],
+                'nachname' => (string)$row['nachname'],
+                'jahrgang' => (int)$row['jahrgang'],
+                'geschlecht' => (string)$row['geschlecht'],
+                'days' => $days,
+            ];
+        }
+
+        return $out;
+    }
+
     /**
      * Holt alle Teilnehmer als vollständige Namen.
      *

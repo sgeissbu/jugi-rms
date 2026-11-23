@@ -22,6 +22,20 @@ final class RankingConfig {
         ];
     }
 
+    /**
+     * Kategorie eines Jahrgangs zum Referenzdatum (wie in den Ranglisten); null = in keiner Kategorie.
+     */
+    public static function categoryForBirthYear(int $birthYear, ?DateTimeInterface $date = null): ?string {
+        $age = self::getReferenceYear($date) - $birthYear;
+        foreach (self::getCategories() as $key => $c) {
+            if ($age >= $c['min_age'] && $age <= $c['max_age']) {
+                return $key;
+            }
+        }
+
+        return null;
+    }
+
     public static function getReferenceYear(?DateTimeInterface $date = null): int {
         $referenceDate = $date ?? new DateTimeImmutable();
         $year = (int)$referenceDate->format('Y');

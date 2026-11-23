@@ -37,6 +37,10 @@ function loadEnv($path) {
 // Die .env Datei laden
 loadEnv(__DIR__ . '/.env');
 
+// Zeitzone: Vorgabe Europe/Zurich, per APP_TIMEZONE änderbar (viele Hoster stehen auf UTC → falsches «heute»).
+$appTimezone = trim((string)getenv('APP_TIMEZONE'));
+date_default_timezone_set($appTimezone !== '' && in_array($appTimezone, timezone_identifiers_list(), true) ? $appTimezone : 'Europe/Zurich');
+
 /**
  * Liest boolesche ENV-Werte robust aus.
  */
@@ -116,4 +120,51 @@ try {
 
     http_response_code(500);
     exit('Interner Serverfehler.');
+}
+
+/**
+ * Liefert das session-gebundene CSRF-Token, erzeugt es bei Bedarf.
+ */
+function csrfToken(): string {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+
+    return $_SESSION['csrf_token'];
+}
+
+/**
+ * Prüft das CSRF-Token eines POST-Requests (Formularfeld csrf_token oder Header X-CSRF-Token, timing-safe).
+ */
+function csrfCheck(): bool {
+    $sent = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
+
+    return is_string($sent) && isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $sent);
+}
+
+/**
+ * HTML-Escaping (Kurzform).
+ */
+function e($value): string {
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Pfad zu einer statischen Datei mit Versions-Parameter (Änderungszeit), damit Browser nach Updates neu laden.
+ */
+function asset(string $path): string {
+    $file = __DIR__ . '/' . $path;
+
+    return $path . (is_file($file) ? '?v=' . filemtime($file) : '');
+}
+
+/**
+ * Inline-SVG-Verweis auf ein Symbol aus assets/img/icons.svg (Linien-Symbole, erben die Textfarbe).
+ */
+function icon(string $name, string $class = 'ico'): string {
+    $name = preg_replace('/[^a-z0-9-]/', '', $name) ?: 'check';
+    static $sprite = null;
+    $sprite ??= asset('assets/img/icons.svg');
+
+    return '<svg class="' . e($class) . '" aria-hidden="true" focusable="false"><use href="' . e($sprite) . '#' . $name . '"></use></svg>';
 }

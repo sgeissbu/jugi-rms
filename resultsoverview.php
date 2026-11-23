@@ -1,112 +1,129 @@
 <?php
-// resultsoverview.php
+// resultsoverview.php – Bestresultate aller aktiven Kinder im laufenden Semester.
+// Suche, Trainingstag-Filter, «nur mit Lücken» und «erfasst x von y» pro Disziplin laufen im Browser (assets/js/uebersicht.js).
 require 'config.php';
 
-use App\Repository\ParticipantRepository;
+use App\Config\DisciplineMeta;
+use App\Config\RankingConfig;
 use App\Repository\DisciplineRepository;
+use App\Repository\ParticipantRepository;
 use App\Repository\ResultRepository;
 use App\Service\AuthService;
 
-// Prüfung, ob der Benutzer eingeloggt ist
 AuthService::requireLogin();
 
 $participantRepo = new ParticipantRepository($pdo);
 $disciplineRepo = new DisciplineRepository($pdo);
 $resultRepo = new ResultRepository($pdo);
 
+$semesterKey = RankingConfig::getSemesterKeyForDate();
+$bounds = RankingConfig::getCurrentSemesterDateBounds();
+$refDate = RankingConfig::getSemesterReferenceDateForCategories($semesterKey);
 $error_message = '';
-$table_data_available = false;
+$kids = [];
+$disciplines = [];
+$best = [];
 
 try {
     $disciplines = $disciplineRepo->getActive();
-    $best_results_raw = $resultRepo->getBestResultsPerParticipant();
-
-    $results_map = [];
-    foreach ($best_results_raw as $row) {
-        $results_map[$row['teilnehmer_name']][$row['disziplin']] = $row['best_resultat'];
+    $kids = $participantRepo->getActiveWithDays();
+    foreach ($resultRepo->getBestByParticipantInPeriod($bounds['start'], $bounds['end']) as $row) {
+        $best[$row['teilnehmer_id']][$row['disziplin']] = (float)$row['best_resultat'];
     }
-
-    $all_participants = $participantRepo->getAllFullNames(true);
-
-    if (empty($all_participants)) {
-        $error_message = 'Keine aktiven Teilnehmer in der Datenbank gefunden.';
-    } elseif (empty($disciplines)) {
-        $error_message = 'Keine Disziplinen in der Datenbank gefunden.';
-    } else {
-        $table_data_available = true;
+    if ($kids === []) {
+        $error_message = 'Keine aktiven Kinder gefunden (mindestens ein Trainingstag = 1).';
+    } elseif ($disciplines === []) {
+        $error_message = 'Keine aktiven Disziplinen gefunden.';
     }
-
 } catch (PDOException $e) {
-    $error_message = 'Datenbankfehler beim Abrufen der Übersicht: ' . $e->getMessage();
+    error_log('resultsoverview: ' . $e->getMessage());
+    $error_message = 'Datenbankfehler beim Laden der Übersicht.';
 }
 
-$pageTitle = 'Ergebnisübersicht';
-$pageHeading = 'Ergebnisübersicht';
-$containerWidthClass = 'max-w-screen-2xl';
+// Nur Trainingstage anzeigen, an denen auch Kinder trainieren
+$usedDays = [];
+foreach ($kids as $k) {
+    foreach ($k['days'] as $day) {
+        $usedDays[$day] = true;
+    }
+}
+
+$pageTitle = 'Übersicht';
+$activeNav = 'uebersicht';
+$wideLayout = true;
 include 'templates/header.php';
 ?>
+<h1>Übersicht</h1>
+<p class="sub">Bestresultate aller aktiven Kinder · <?php echo e(RankingConfig::getSemesterLabel($semesterKey)); ?></p>
 
-        <?php if ($error_message): ?>
-            <div class="mb-6 p-4 border rounded-lg bg-red-100 border-red-400 text-red-700" role="alert">
-                <p class="font-medium">❌ <?php echo htmlspecialchars($error_message); ?></p>
+<?php if ($error_message): ?>
+    <div class="alert err" role="alert"><?php echo icon('info') . e($error_message); ?></div>
+<?php else: ?>
+    <div class="toolbar">
+        <div class="search"><?php echo icon('search'); ?><input class="inp" id="q" type="search" placeholder="Kind suchen …" autocomplete="off" aria-label="Kind suchen"></div>
+        <?php if (count($usedDays) > 1): ?>
+            <div class="seg" id="days" role="group" aria-label="Trainingstag">
+                <button type="button" data-day="" aria-pressed="true">Alle</button>
+                <?php foreach (ParticipantRepository::WEEKDAYS as $day => $short): if (isset($usedDays[$day])): ?>
+                    <button type="button" data-day="<?php echo $day; ?>" aria-pressed="false"><?php echo $short; ?></button>
+                <?php endif; endforeach; ?>
             </div>
         <?php endif; ?>
+        <label class="switch"><input type="checkbox" id="gaps"> nur mit Lücken</label>
+    </div>
 
-        <?php if ($table_data_available): ?>
-          <div class="mb-4">
-              <div class="relative">
-                  <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
-                      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                  </span>
-                  <input type="text" id="participantSearch" placeholder="Teilnehmer suchen..." 
-                         class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] sm:text-sm transition duration-150 shadow-sm">
-              </div>
-          </div>
+    <div class="progress" id="prog">
+        <?php foreach ($disciplines as $i => $d): ?>
+            <div class="card prog" data-d="<?php echo $i; ?>">
+                <div class="h"><?php echo icon(DisciplineMeta::symbol($d['name'], $d['symbol'])) . e($d['name']); ?></div>
+                <div class="c"></div>
+                <div class="bar"><i></i></div>
+            </div>
+        <?php endforeach; ?>
+    </div>
 
-          <div class="table-container table-container--overview shadow-xl rounded-lg border border-gray-200">
-              <table class="min-w-full divide-y divide-gray-300 ranking-table">
-                  <thead class="sticky-header text-white">
-                      <tr>
-                          <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold sticky-col">
-                              Name
-                          </th>
-                          <?php foreach ($disciplines as $d): ?>
-                              <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold">
-                                  <?php echo htmlspecialchars($d['name']); ?>
-                                  <span class="text-[10px] font-normal opacity-75 block leading-tight">
-                                      (<?php echo $d['hoch_ist_besser'] ? '↑' : '↓'; ?>)
-                                  </span>
-                              </th>
-                          <?php endforeach; ?>
-                      </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-200 bg-white">
-                      <?php foreach ($all_participants as $participant_name): ?>
-                      <tr class="hover:bg-blue-50 transition-colors duration-75">
-                          <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6 sticky-col bg-inherit border-r border-gray-200">
-                              <?php echo htmlspecialchars($participant_name); ?>
-                          </td>
-                          <?php foreach ($disciplines as $d):
-                              $discipline_name = $d['name'];
-                              $result = $results_map[$participant_name][$discipline_name] ?? null;
-                              $display_result = $result !== null ? number_format($result, 2, '.', "'") : '-';
-                              $class = $result !== null ? 'font-semibold text-gray-800' : 'text-gray-400';
-                          ?>
-                              <td class="whitespace-nowrap px-3 py-4 text-sm text-center <?php echo $class; ?>">
-                                  <?php echo $display_result; ?>
-                              </td>
-                          <?php endforeach; ?>
-                      </tr>
-                      <?php endforeach; ?>
-                  </tbody>
-              </table>
-          </div>
-          <p class="mt-4 text-xs text-gray-500 text-center">
-              Nutze das Suchfeld, um schnell nach Teilnehmern zu filtern. (↑ = Hoch ist besser, ↓ = Zeit/Tief ist besser)
-          </p>
-        <?php endif; ?>
-
-<?php 
-$extraScripts = '<script src="assets/js/resultsoverview.js"></script>';
-include 'templates/footer.php'; 
-?>
+    <div class="card tbl-wrap">
+        <table class="grid" id="ov">
+            <thead>
+                <tr>
+                    <th class="name">Kind</th>
+                    <?php foreach ($disciplines as $d):
+                        $unit = DisciplineMeta::unitFor($d, $semesterKey); ?>
+                        <th><?php echo icon(DisciplineMeta::symbol($d['name'], $d['symbol'])) . e($d['name']); ?>
+                            <span class="dir"><?php echo ((int)$d['hoch_ist_besser'] ? '↑ höher besser' : '↓ tiefer besser') . (DisciplineMeta::unitLabel($unit) !== '' ? ' · ' . e(DisciplineMeta::unitLabel($unit)) : ''); ?></span></th>
+                    <?php endforeach; ?>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($kids as $k):
+                    $name = $k['vorname'] . ' ' . $k['nachname'];
+                    $cat = RankingConfig::categoryForBirthYear($k['jahrgang'], $refDate); ?>
+                    <tr data-name="<?php echo e(mb_strtolower($name, 'UTF-8')); ?>" data-days="<?php echo e(implode(' ', $k['days'])); ?>">
+                        <td class="name"><b><?php echo e($name); ?></b><small><?php echo (int)$k['jahrgang'] . ($cat ? ' · ' . e($cat) : '') . ' · ' . e(implode('/', array_map(function ($day) { return ParticipantRepository::WEEKDAYS[$day]; }, $k['days']))); ?></small></td>
+                        <?php foreach ($disciplines as $d):
+                            $v = $best[$k['id']][$d['name']] ?? null;
+                            $unit = DisciplineMeta::unitFor($d, $semesterKey);
+                            $counts = $cat === null || DisciplineMeta::countsFor($d, $cat);
+                            if ($v === null && !$counts): ?>
+                                <td class="na" title="zählt für <?php echo e($cat); ?> nicht"><span>·</span></td>
+                            <?php elseif ($v === null): ?>
+                                <td class="miss"><span>fehlt</span></td>
+                            <?php elseif (!$counts): ?>
+                                <td class="ng" title="nicht gewertet (zählt für <?php echo e($cat); ?> nicht in der Rangliste)"><?php echo e(DisciplineMeta::format($v, $unit)); ?><small>nicht gewertet</small></td>
+                            <?php else:
+                                $kind = DisciplineMeta::unitKind($unit);
+                                $suffix = ($kind === 'time' && $v >= 60) || $kind === 'stufe' || $kind === 'none' ? '' : DisciplineMeta::unitLabel($unit); ?>
+                                <td><?php echo e(DisciplineMeta::format($v, $unit, false)); ?><?php if ($suffix !== ''): ?><span class="u"><?php echo e($suffix); ?></span><?php endif; ?></td>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p class="empty" id="none" hidden>Kein Kind passt zum Filter.</p>
+    </div>
+    <p class="legend">Oben pro Disziplin: wie viele der angezeigten Kinder schon ein Resultat haben (nur Kinder, für deren Kategorie die Disziplin zählt). Grau = erfasst, aber in dieser Kategorie nicht gewertet. Die Tabelle scrollt seitlich, die Namen bleiben stehen.</p>
+<?php endif; ?>
+<?php
+$extraScripts = '<script src="' . e(asset('assets/js/uebersicht.js')) . '"></script>';
+include 'templates/footer.php';

@@ -2,6 +2,7 @@
 // rangliste.php
 require 'config.php';
 
+use App\Config\DisciplineMeta;
 use App\Config\RankingConfig;
 use App\Repository\ParticipantRepository;
 use App\Repository\DisciplineRepository;
@@ -57,7 +58,8 @@ try {
         $min_birth_year,
         $max_birth_year,
         $semester_bounds['start'],
-        $semester_bounds['end']
+        $semester_bounds['end'],
+        $selected_category_key
     );
 
     if (empty($rankingData['participants'])) {
@@ -70,120 +72,143 @@ try {
         $results_map = $rankingData['results_map'];
         $disciplines = $rankingData['disciplines'];
         $all_disciplines_names = $rankingData['discipline_names'];
+        // Symbol und Einheit (für das gewählte Semester) je Disziplin
+        $meta = $disciplineRepo->getMetadataByNames($all_disciplines_names);
+        foreach ($disciplines as &$d) {
+            $m = $meta[$d['name']] ?? [];
+            $d['symbol'] = DisciplineMeta::symbol($d['name'], $m['symbol'] ?? null);
+            $d['unit'] = DisciplineMeta::unitFor($m, $selected_semester_key);
+        }
+        unset($d);
     }
 } catch (Exception $e) {
-    $error_message = 'Fehler bei der Ranking-Berechnung: ' . $e->getMessage();
+    error_log('rangliste: ' . $e->getMessage());
+    $error_message = 'Fehler bei der Berechnung der Rangliste.';
 }
 
-$pageTitle = 'Rangliste | ' . $semester_label . ' | ' . $geschlecht_label . ' ' . $selected_category_key;
-$pageHeading = 'Ranglisten';
-$containerWidthClass = 'max-w-7xl';
-$extraStylesheets = ['assets/css/rangliste.css'];
+$pageTitle = 'Rangliste ' . $geschlecht_label . ' ' . $selected_category_key;
+$activeNav = 'rangliste';
+$wideLayout = true;
 include 'templates/header.php';
+
+function rang_medal(int $rank): string {
+    return '<span class="medal' . ($rank <= 3 ? ' m' . $rank : '') . '">' . $rank . '</span>';
+}
 ?>
+<h1>Rangliste</h1>
+<p class="sub">Punkte = Summe der Ränge · weniger ist besser</p>
 
-        <h1 class="text-3xl font-bold text-center text-[var(--color-primary)] mb-6">Rangliste <?php echo htmlspecialchars($geschlecht_label . ' ' . $selected_category_key); ?></h1>
+<div class="filters">
+    <form method="get" action="rangliste.php">
+        <input type="hidden" name="kategorie" value="<?php echo e($selected_category_key); ?>">
+        <input type="hidden" name="geschlecht" value="<?php echo e($selected_geschlecht); ?>">
+        <select class="sel" name="semester" aria-label="Semester" onchange="this.form.submit()">
+            <?php foreach ($semester_options as $opt): ?>
+                <option value="<?php echo e($opt['value']); ?>"<?php echo $selected_semester_key === $opt['value'] ? ' selected' : ''; ?>><?php echo e($opt['label']); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <noscript><button class="btn" type="submit">Anzeigen</button></noscript>
+    </form>
+    <nav class="seg" aria-label="Kategorie">
+        <?php foreach ($categories as $key => $cat):
+            $sub = preg_match('/\((.*)\)/', $cat['label'], $m) ? $m[1] : ''; ?>
+            <a href="<?php echo e('rangliste.php' . rangliste_query_params(['kategorie' => $key])); ?>"<?php echo $selected_category_key === $key ? ' aria-current="true"' : ''; ?>><?php echo e($key); ?><?php if ($sub !== ''): ?><small><?php echo e($sub); ?></small><?php endif; ?></a>
+        <?php endforeach; ?>
+    </nav>
+    <nav class="seg" aria-label="Geschlecht">
+        <?php foreach (['Mädchen', 'Buben'] as $g): ?>
+            <a href="<?php echo e('rangliste.php' . rangliste_query_params(['geschlecht' => $g])); ?>"<?php echo $selected_geschlecht === $g ? ' aria-current="true"' : ''; ?>><?php echo e($g); ?></a>
+        <?php endforeach; ?>
+    </nav>
+</div>
 
-        <div class="mb-8 p-4 bg-gray-50 rounded-xl shadow-inner">
-            <div class="space-y-4">
-                <div class="rangliste-semester-bar">
-                    <label for="semester_select" class="rangliste-semester-bar__label">Semester</label>
-                    <form method="get" action="rangliste.php" class="rangliste-semester-bar__form">
-                        <input type="hidden" name="kategorie" value="<?php echo htmlspecialchars($selected_category_key); ?>">
-                        <input type="hidden" name="geschlecht" value="<?php echo htmlspecialchars($selected_geschlecht); ?>">
-                        <select
-                            name="semester"
-                            id="semester_select"
-                            class="rangliste-semester-bar__select"
-                            onchange="this.form.submit()"
-                            aria-label="Semester wählen"
-                        >
-                            <?php foreach ($semester_options as $opt): ?>
-                                <option value="<?php echo htmlspecialchars($opt['value']); ?>" <?php echo ($selected_semester_key === $opt['value']) ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($opt['label']); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </form>
-                </div>
-                <div class="flex flex-wrap gap-2 justify-center">
-                    <?php foreach ($categories as $key => $cat):
-                        $url = 'rangliste.php' . rangliste_query_params(['kategorie' => $key]);
-                    ?>
-                        <a href="<?php echo htmlspecialchars($url); ?>" class="toggle-btn <?php echo ($selected_category_key === $key) ? 'toggle-btn-active' : 'toggle-btn-inactive'; ?>"><?php echo $cat['label']; ?></a>
-                    <?php endforeach; ?>
-                </div>
-                <div class="flex gap-4 justify-center pt-4 border-t border-gray-200">
-                    <?php foreach (['Buben', 'Mädchen'] as $g):
-                        $url = 'rangliste.php' . rangliste_query_params(['geschlecht' => $g]);
-                    ?>
-                        <a href="<?php echo htmlspecialchars($url); ?>" class="toggle-btn <?php echo ($selected_geschlecht === $g) ? 'toggle-btn-active' : 'toggle-btn-inactive'; ?>"><?php echo $g; ?></a>
-                    <?php endforeach; ?>
-                </div>
+<div class="card">
+    <div class="rk-head">
+        <h2><?php echo e($selected_category_key . ' · ' . $geschlecht_label); ?>
+            <small><?php echo e($semester_label . ($table_data_available ? ' · ' . count($all_participants_names) . ' Kinder' : '') . ' · Jahrgänge ' . $min_birth_year . '–' . $max_birth_year); ?></small></h2>
+        <?php if ($table_data_available): ?>
+            <div class="act">
+                <a class="btn" href="<?php echo e('export_ranglisten_pdf.php' . rangliste_query_params([])); ?>"><?php echo icon('download'); ?>PDF<span class="long">(alle Kategorien)</span></a>
+                <a class="btn" href="<?php echo e('export_rangliste.php' . rangliste_query_params([])); ?>">CSV</a>
+                <button class="btn" type="button" onclick="window.print()" title="Drucken"><?php echo icon('printer'); ?></button>
             </div>
+        <?php endif; ?>
+    </div>
+
+    <?php if ($error_message): ?>
+        <p class="empty"><?php echo e($error_message); ?></p>
+    <?php endif; ?>
+
+    <?php if ($table_data_available):
+        $ranks = [];
+        $rank = 0; $last = null;
+        foreach ($all_participants_names as $i => $pname) {
+            $pts = $results_map[$pname]['total_points'];
+            if ($pts !== $last) { $rank = $i + 1; $last = $pts; }
+            $ranks[$pname] = $rank;
+        }
+    ?>
+        <div class="tbl-wrap rk-table" style="border-radius: 0 0 var(--r) var(--r)">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>Rang</th>
+                        <th class="name">Name</th>
+                        <th>Jg.</th>
+                        <?php foreach ($disciplines as $d): ?>
+                            <th><?php echo icon($d['symbol']) . e($d['name']); ?><span class="dir"><?php echo ($d['hoch_ist_besser'] ? '↑' : '↓') . (DisciplineMeta::unitLabel($d['unit']) !== '' ? ' ' . e(DisciplineMeta::unitLabel($d['unit'])) : ''); ?></span></th>
+                        <?php endforeach; ?>
+                        <th class="tot">Punkte</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($all_participants_names as $pname):
+                        $row = $results_map[$pname]; ?>
+                        <tr>
+                            <td><?php echo rang_medal($ranks[$pname]); ?></td>
+                            <td class="name"><b><?php echo e($pname); ?></b></td>
+                            <td><?php echo e($row['jahrgang']); ?></td>
+                            <?php foreach ($disciplines as $d):
+                                $res = $row['results'][$d['name']] ?? null;
+                                $pts = $row['discipline_points'][$d['name']] ?? null;
+                                if ($res === null): ?>
+                                    <td class="res pen"><b>fehlt</b><small>+<?php echo (int)$pts; ?></small></td>
+                                <?php else: ?>
+                                    <td class="res"><b><?php echo e(DisciplineMeta::format($res, $d['unit'], false)); ?></b><small>Rang <?php echo (int)$pts; ?></small></td>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                            <td class="tot"><?php echo (int)$row['total_points']; ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
 
-        <?php if ($error_message): ?>
-            <p class="text-red-600 font-medium text-center bg-red-100 p-4 rounded-lg"><?php echo $error_message; ?></p>
-        <?php endif; ?>
-
-        <?php if ($table_data_available): ?>
-            <div class="flex flex-wrap justify-end gap-2 mb-4">
-                <a href="<?php echo htmlspecialchars('export_ranglisten_pdf.php' . rangliste_query_params([])); ?>" class="flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[var(--color-primary)] hover:bg-gray-700 transition duration-150">PDF exportieren (alle)</a>
-                <a href="<?php echo htmlspecialchars('export_rangliste.php' . rangliste_query_params([])); ?>" class="flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[var(--color-primary)] hover:bg-gray-700 transition duration-150">CSV exportieren</a>
-            </div>
-
-            <div class="table-container border border-gray-200 rounded-lg shadow-xl">
-                <table class="min-w-full divide-y divide-gray-300">
-                    <thead class="bg-[var(--color-primary)] text-white sticky-header">
-                        <tr>
-                            <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold sticky-col sm:pl-6 w-[100px]">Platz</th>
-                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Name</th>
-                            <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold">Jg.</th>
-                            <?php foreach ($disciplines as $d): ?>
-                                <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold border-l border-gray-600">
-                                    <?php echo htmlspecialchars($d['name']); ?>
-                                    <span class="text-[10px] font-normal opacity-75 block leading-tight">
-                                        (<?php echo $d['hoch_ist_besser'] ? '↑' : '↓'; ?>)
-                                    </span>
-                                </th>
-                            <?php endforeach; ?>
-                            <th scope="col" class="px-3 py-3.5 text-center text-sm font-bold text-[var(--color-secondary)] border-l border-gray-600">Punkte</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200 bg-white">
-                        <?php
-                        $rank = 0; $last_points = null;
-                        foreach ($all_participants_names as $i => $participant_name):
-                            $current_points = $results_map[$participant_name]['total_points'];
-                            if ($current_points !== $last_points) { $rank = $i + 1; $last_points = $current_points; }
-                            $rank_display = ($rank === 1) ? '🥇' : ($rank === 2 ? '🥈' : ($rank === 3 ? '🥉' : $rank));
-                            $row_class = ($rank === 1) ? 'bg-yellow-50' : (($rank === 2) ? 'bg-gray-100' : (($rank === 3) ? 'bg-yellow-100' : ''));
-                        ?>
-                        <tr class="<?php echo $row_class; ?>">
-                            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-bold text-[var(--color-primary)] sm:pl-6 sticky-col border-r border-gray-200"><?php echo $rank_display; ?></td>
-                            <td class="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-900"><?php echo htmlspecialchars($participant_name); ?></td>
-                            <td class="whitespace-nowrap px-3 py-4 text-sm text-center text-gray-700"><?php echo htmlspecialchars($results_map[$participant_name]['jahrgang']); ?></td>
-                            <?php foreach ($all_disciplines_names as $discipline_name):
-                                $result = $results_map[$participant_name]['results'][$discipline_name] ?? null;
-                                $points = $results_map[$participant_name]['discipline_points'][$discipline_name] ?? null;
-                                $display_result = $result !== null ? number_format($result, 2, '.', "'") : '-';
-                                $is_penalty = $result === null;
-                            ?>
-                                <td class="whitespace-nowrap px-3 py-4 text-xs text-center border-l border-gray-200">
-                                    <div class="font-bold text-sm <?php echo $is_penalty ? 'text-red-600' : 'text-[var(--color-primary)]'; ?>"><?php echo $points; ?></div>
-                                    <div class="text-xs <?php echo $is_penalty ? 'text-red-400' : 'text-gray-500 italic'; ?>"><?php echo $display_result; ?></div>
-                                </td>
-                            <?php endforeach; ?>
-                            <td class="whitespace-nowrap px-3 py-4 text-sm text-center font-extrabold text-[var(--color-secondary)] rangliste-total-highlight border-l border-gray-200"><?php echo $current_points; ?></td>
-                        </tr>
+        <ul class="rk-list">
+            <?php foreach ($all_participants_names as $i => $pname):
+                $row = $results_map[$pname];
+                $missing = 0;
+                foreach ($disciplines as $d) { if (!isset($row['results'][$d['name']])) $missing++; } ?>
+                <li><details<?php echo $i === 0 ? ' open' : ''; ?>>
+                    <summary><?php echo rang_medal($ranks[$pname]); ?>
+                        <span><b><?php echo e($pname); ?></b><small><?php echo e($row['jahrgang']) . ($missing ? ' · ' . $missing . ' fehlt' : ''); ?></small></span>
+                        <span class="pts"><?php echo (int)$row['total_points']; ?><small>Punkte</small></span>
+                        <?php echo icon('chev-down', 'ico chev'); ?>
+                    </summary>
+                    <div class="rk-detail">
+                        <?php foreach ($disciplines as $d):
+                            $res = $row['results'][$d['name']] ?? null;
+                            $pts = (int)($row['discipline_points'][$d['name']] ?? 0); ?>
+                            <div<?php echo $res === null ? ' class="pen"' : ''; ?>><span><?php echo icon($d['symbol']) . e($d['name']); ?></span>
+                                <b><?php echo $res === null ? 'fehlt' : e(DisciplineMeta::format($res, $d['unit'])); ?></b><em><?php echo ($res === null ? '+' : 'Rang ') . $pts; ?></em></div>
                         <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-            <p class="mt-4 text-xs text-gray-500 text-center">
-                (↑ = Hoch ist besser, ↓ = Zeit/Tief ist besser)
-            </p>
-        <?php endif; ?>
-
+                    </div>
+                </details></li>
+            <?php endforeach; ?>
+        </ul>
+    <?php endif; ?>
+</div>
+<?php if ($table_data_available): ?>
+    <p class="legend">So wird gerechnet: Pro Disziplin gibt der Rang die Punkte (1. = 1 Punkt, gleiches Resultat = gleicher Rang). Fehlt ein Resultat, zählt der schlechteste Rang + 1. Die Summe entscheidet – weniger Punkte = besser.</p>
+<?php endif; ?>
 <?php include 'templates/footer.php'; ?>

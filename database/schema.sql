@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS disziplinen (
     name VARCHAR(150) NOT NULL,
     aktiv TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'nur aktive Disziplinen erscheinen bei Erfassung/Autocomplete',
     hoch_ist_besser TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1 = hoeherer Wert ist besser (z.B. Weitsprung), 0 = tieferer Wert ist besser (z.B. Laufzeit)',
+    symbol VARCHAR(40) NULL DEFAULT NULL COMMENT 'optional: Symbol-Name aus assets/img/icons.svg (z.B. d-weit); leer = automatisch nach Disziplin-Name',
+    einheit_winter VARCHAR(20) NULL DEFAULT NULL COMMENT 'optional: Einheit im Wintersemester (z.B. Stufe, m, s); leer = einheit_sommer',
+    einheit_sommer VARCHAR(20) NULL DEFAULT NULL COMMENT 'optional: Einheit im Sommersemester; leer = einheit_winter. s = Zeit (Eingabe 80 oder 1:20)',
+    kategorien VARCHAR(100) NULL DEFAULT NULL COMMENT 'optional: zählt nur in diesen Kategorien für die Rangliste, z.B. U8/U10,U12; leer = alle',
     UNIQUE KEY uniq_disziplinen_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

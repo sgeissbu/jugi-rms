@@ -39,54 +39,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pageTitle = 'Benutzer anlegen';
-$pageHeading = 'Benutzer anlegen';
+$bareLayout = true;
 include 'templates/header.php';
 ?>
-
-        <?php if ($message):
-            $alert_bg = $isSuccess ? 'bg-green-100 border-green-400 text-green-700' : 'bg-red-100 border-red-400 text-red-700';
-            $alert_icon = $isSuccess ? '✅' : '❌';
-        ?>
-            <div class="mb-6 p-4 border rounded-lg <?php echo $alert_bg; ?>" role="alert">
-                <p class="font-medium"><?php echo $alert_icon; ?> <?php echo htmlspecialchars($message); ?></p>
-            </div>
+<div class="login">
+    <div class="card">
+        <div class="head">
+            <?php echo \App\Config\BrandConfig::logoHtml(''); ?>
+            <h1>Benutzer anlegen</h1>
+            <p class="sub">Login für Leiterinnen und Leiter (Prüfer)</p>
+        </div>
+        <?php if ($message): ?>
+            <div class="alert <?php echo $isSuccess ? 'ok' : 'err'; ?>" role="alert"><?php echo icon($isSuccess ? 'check' : 'info') . e($message); ?></div>
         <?php endif; ?>
-
-        <form method="POST" action="<?php echo htmlspecialchars('create_user.php?secret=' . urlencode($providedSecret)); ?>" class="space-y-6">
-            <input type="hidden" name="secret" value="<?php echo htmlspecialchars($providedSecret); ?>">
-            <div>
-                <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Benutzername</label>
-                <input
-                    type="text"
-                    id="username"
-                    name="username"
-                    required
-                    placeholder="z.B. mmuster"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition duration-150 shadow-sm"
-                >
+        <form method="POST" action="<?php echo e('create_user.php?secret=' . urlencode($providedSecret)); ?>">
+            <input type="hidden" name="secret" value="<?php echo e($providedSecret); ?>">
+            <div class="field">
+                <label for="username">Benutzername</label>
+                <input class="inp" id="username" name="username" required autocomplete="off" autocapitalize="off" placeholder="z.B. mmuster">
             </div>
-
-            <div>
-                <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Passwort (mind. 8 Zeichen)</label>
-                <input
-                    type="password"
-                    id="password"
-                    name="password"
-                    required
-                    minlength="8"
-                    placeholder="Passwort eingeben"
-                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] transition duration-150 shadow-sm"
-                >
+            <div class="field">
+                <label for="password">Passwort (mind. 8 Zeichen)</label>
+                <input class="inp" id="password" name="password" type="password" required minlength="8" autocomplete="new-password">
             </div>
-
-            <button
-                type="submit"
-                class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-lg font-semibold text-white bg-[var(--color-primary)] hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] transition duration-200 ease-in-out transform hover:scale-[1.01]"
-            >
-                Benutzer anlegen
-            </button>
+            <button class="btn primary" type="submit">Benutzer anlegen</button>
         </form>
-
-<?php
-include 'templates/footer.php';
-?>
+        <p class="sub" style="margin-top:14px"><a href="login.php">Zur Anmeldung</a></p>
+    </div>
+</div>
+<?php include 'templates/footer.php'; ?>

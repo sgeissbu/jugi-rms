@@ -39,7 +39,8 @@ try {
         $min_birth_year,
         $max_birth_year,
         $semester_bounds['start'],
-        $semester_bounds['end']
+        $semester_bounds['end'],
+        $selected_category_key
     );
     if (empty($rankingData['participants'])) exit("Keine Teilnehmer gefunden.");
 
@@ -58,7 +59,7 @@ try {
         $header[] = $disc_name . ' (Punkte)';
     }
     $header[] = 'Gesamtpunkte';
-    fputcsv($output, $header, ';');
+    fputcsv($output, $header, ';', '"', '\\');
 
     $rank = 0; $last_points = null;
     foreach ($all_participants_names as $i => $participant_name) {
@@ -73,7 +74,7 @@ try {
             $row[] = $points;
         }
         $row[] = $current_points;
-        fputcsv($output, $row, ';');
+        fputcsv($output, $row, ';', '"', '\\');
     }
     fclose($output);
 } catch (Exception $e) {
